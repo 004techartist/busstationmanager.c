@@ -3,6 +3,7 @@
 #include <string.h>
 
 
+
 #define MAX_BUS_SCHEDULES
 #define MAX_CAPACITY 50
 #define MAX_ROUTE_LENGTH 100
@@ -12,11 +13,14 @@
 #define MAX_BUS_SCHEDULES 10
 #define MAX_PASSENGER_NAME_LENGTH 100
 #define MAX_SCHEDULES 100
+#define MAX_SEATS 57
 #define MAX_HISTORY_ENTRIES 100
 #define MAX_HISTORY_ENTRIES 100
 #define BUS_SCHEDULE_FILE "bus_schedules.dat"
 #define TICKET_HISTORY_FILE "ticket_history.dat"
 #define CANCELLATION_HISTORY_FILE "cancellation_history.dat"
+
+
 
 
 typedef struct {
@@ -45,7 +49,8 @@ typedef struct {
     int availabeSeats;
     int capacity;
     char seat;
-    char availableSeats[57]; // A: Available, X: Occupied
+    int scheduleId;
+    char availableSeats[MAX_SEATS];  // Array to track seat availability (X for booked)
 } BusSchedule;
 
 BusSchedule schedules[MAX_BUS_SCHEDULES];
@@ -63,13 +68,15 @@ typedef struct {
 Passenger passenger;
 
 
+// Initialize available seats for each bus schedule
 void initializeSchedules() {
     for (int i = 0; i < MAX_BUS_SCHEDULES; i++) {
-        for (int j = 0; j < 57; j++) {
-            schedules[i].availableSeats[j] = 'A'; // Mark all seats as available
+        for (int j = 0; j < MAX_SEATS; j++) {
+            schedules[i].availableSeats[j] = 'O';
         }
     }
 }
+
 
 
 
@@ -116,24 +123,108 @@ void displayBusSchedules() {
         printf("\t\t\t\t\t\t\t\t================================================================================================================\n");
     }
 }
-// Declaration of the function
-void updateAvailableSeats(int scheduleIndex, int numBookedSeats);
 
-// ...
+void deleteBusSchedule(int scheduleIndex) {
+    if (scheduleIndex < 1 || scheduleIndex > numSchedules) {
+        printf("Invalid schedule index. Please choose a valid schedule.\n");
+        return;
+    }
 
+    // Move all schedules after the deleted schedule to fill the gap
+    for (int i = scheduleIndex - 1; i < numSchedules - 1; i++) {
+        schedules[i] = schedules[i + 1];
+    }
 
+    numSchedules--;
 
-void viewAvailableSeats(int scheduleIndex) {
+    printf("Bus schedule at index %d deleted successfully.\n", scheduleIndex);
+}
+
+void markSeatAsBooked(BusSchedule *schedule, int seatNumber) {
+    if (schedule && seatNumber >= 1 && seatNumber <= 57) {
+        // Calculate the index of the selected seat in the availableSeats array
+        int seatIndex = seatNumber - 1;
+        schedule->availableSeats[seatIndex] = 'X';  // Mark the seat as booked
+    }
+}
+
+char getSeatStatus(BusSchedule *schedule, int seatNumber) {
+    if (schedule && seatNumber >= 1 && seatNumber <= 57) {
+        // Calculate the index of the selected seat in the availableSeats array
+        int seatIndex = seatNumber - 1;
+        return schedule->availableSeats[seatIndex];
+    }
+    return ' '; // Return a space if the seat is out of range or the schedule is invalid
+}
+
+int scheduleIndex;
+char selectedSeatType;
+// Function to book a seat for a specific bus schedule
+
+void bookTicketForSchedule(int scheduleIndex) {
+    if (passenger.isTicketIssued) {
+        printf("You have already booked a ticket.\n");
+        return;
+    }
+
     if (scheduleIndex < 1 || scheduleIndex > numSchedules) {
         printf("Invalid schedule index.\n");
         return;
     }
 
     BusSchedule *schedule = &schedules[scheduleIndex - 1];
-    printf("Available Seats for Schedule %d (%s to %s):\n", scheduleIndex, schedule->route, schedule->destination);
+
+    // Display available seats for the selected bus schedule
+    viewAvailableSeatsForSchedule(schedule);
+
+    int selectedSeat;
+    char selectedSeatType;
+
+    printf("Enter the seat you want to book (e.g., 1 for A1, 12 for W12): ");
+    scanf("%d", &selectedSeat);
+
+    if (selectedSeat < 1 || selectedSeat > MAX_SEATS) {
+        printf("Invalid seat number. Please choose a valid seat.\n");
+        return;
+    }
+
+    selectedSeat--;  // Adjust to 0-based index
+
+    if (selectedSeat < 0 || selectedSeat >= MAX_SEATS) {
+        printf("Invalid seat number. Please choose a valid seat.\n");
+        return;
+    }
+
+    if (schedule->availableSeats[selectedSeat] == 'X') {
+        printf("Selected seat is already booked. Please choose another seat.\n");
+    } else {
+        // Update the total ticket price and issue the ticket
+        passenger.numSeats = selectedSeat + 1;
+        passenger.totalTicketPrice = schedule->ticketPrice;
+        printf("Ticket booked successfully for %s on schedule %d for seat %c%d.\n",
+               passenger.name, scheduleIndex, selectedSeatType, selectedSeat + 1);
+        printf("Total Ticket Price: %.2f\n", passenger.totalTicketPrice);
+        passenger.isTicketIssued = 1;
+
+        // Update the availableSeats array to mark the seat as booked
+        schedule->availableSeats[selectedSeat] = 'X';
+    }
+}
+// Declaration of the function
+void updateAvailableSeats(int scheduleIndex, int numBookedSeats);
+
+// ...
+
+void viewAvailableSeatsForSchedule(BusSchedule *schedule) {
+    if (schedule == NULL) {
+        printf("Invalid schedule.\n");
+        return;
+    }
+
+    printf("Available Seats for Schedule %d (%s to %s):\n", schedule->scheduleId, schedule->route, schedule->destination);
     printf("Legend: [W] Window Seat, [A] Aisle Seat, [X] Booked Seat\n");
 
-    for (int row = 0; row < 57 / 4; row++) {
+    for (int row = 0; row < MAX_SEATS / 4; row++) {
         for (int col = 0; col < 4; col++) {
             int seatNumber = 4 * row + col;
             char seatType;
@@ -144,8 +235,7 @@ void viewAvailableSeats(int scheduleIndex) {
                 seatType = 'A';  // Aisle seats
             }
 
-            int seatIndex = 4 * row + col;
-            char status = schedule->availableSeats[seatIndex];
+            char status = schedule->availableSeats[seatNumber];
 
             if (status == 'X') {
                 printf("[X] ");  // Booked seat
@@ -154,6 +244,39 @@ void viewAvailableSeats(int scheduleIndex) {
             }
         }
         printf("\n");
+    }
+}
+
+char selectedSeatType;
+
+void issueTicketForSchedule(int scheduleIndex) {
+    if (!passenger.isTicketIssued) {
+        printf("You have not booked a ticket yet.\n");
+        return;
+    }
+
+    if (scheduleIndex < 1 || scheduleIndex > numSchedules) {
+        printf("Invalid schedule index.\n");
+        return;
+    }
+
+    BusSchedule *schedule = &schedules[scheduleIndex - 1];
+
+    // Display available seats for the selected bus schedule
+    viewAvailableSeatsForSchedule(schedule);
+
+    // Check if a ticket is issued
+    if (passenger.isTicketIssued) {
+        printf("Receipt for Ticket Issued:\n");
+        printf("Passenger Name: %s\n", passenger.name);
+        printf("Bus Schedule Index: %d\n", scheduleIndex);
+        printf("Seat: %c%d\n", selectedSeatType, passenger.numSeats);
+        printf("Departure Time: %s\n", schedule->depTime);
+        printf("Ticket Price: %.2f\n", schedule->ticketPrice);
+        printf("Route: %s\n", schedule->route);
+        printf("Destination: %s\n", schedule->destination);
+    } else {
+        printf("You have not booked a ticket yet.\n");
     }
 }
 
@@ -171,47 +294,55 @@ void bookTicket() {
     printf("Enter the bus schedule index you want to book: ");
     scanf("%d", &passenger.busScheduleIndex);
 
-    // Display available seats for the selected bus schedule
-    viewAvailableSeats(passenger.busScheduleIndex);
+    int scheduleIndex = passenger.busScheduleIndex;
 
-    char selectedSeat[3]; // A string to store the seat input, e.g., "A1" or "W2"
-    printf("Enter the seat you want to book (e.g., A1, W2): ");
-    scanf("%s", selectedSeat);
-
-    // Convert the seat input to numeric seat number
-    int selectedSeatNumber = -1;
-    if (selectedSeat[0] == 'A' || selectedSeat[0] == 'W') {
-        selectedSeatNumber = atoi(selectedSeat + 1);
-    }
-
-    if (selectedSeatNumber < 1 || selectedSeatNumber > 57) {
-        printf("Invalid seat number. Please choose a valid seat.\n");
+    // Check if the selected schedule exists
+    if (scheduleIndex < 1 || scheduleIndex > numSchedules) {
+        printf("Invalid schedule index.\n");
         return;
     }
 
-    // Check if the selected seat is available
-    int isSeatAvailable = 1; // Assuming the seat is available
-    for (int i = 0; i < numTicketHistoryEntries; i++) {
-        if (ticketHistory[i].busScheduleIndex == passenger.busScheduleIndex &&
-            ticketHistory[i].numSeats == selectedSeatNumber) {
-            isSeatAvailable = 0; // Seat is already booked
-            break;
-        }
+    // Book a ticket within the selected bus schedule
+    bookTicketForSchedule(scheduleIndex);
+}
+
+
+void issueTicket() {
+    if (!passenger.isTicketIssued) {
+        printf("You have not booked a ticket yet.\n");
+        return;
     }
 
-    if (!isSeatAvailable) {
-        printf("Selected seat is already booked. Please choose another seat.\n");
-    } else {
-        // Update the total ticket price and issue the ticket
-        passenger.numSeats = selectedSeatNumber;
-        passenger.totalTicketPrice = schedules[passenger.busScheduleIndex - 1].ticketPrice;
-        printf("Ticket booked successfully for %s on schedule %d for seat %s.\n",
-               passenger.name, passenger.busScheduleIndex, selectedSeat);
-        printf("Total Ticket Price: %.2f\n", passenger.totalTicketPrice);
-        passenger.isTicketIssued = 1;
-        updateAvailableSeats(passenger.busScheduleIndex, 1); // Mark the selected seat as booked
-    }
+    int scheduleIndex = passenger.busScheduleIndex;
+    int seatNumber = passenger.numSeats;
+
+    generateReceipt(scheduleIndex, seatNumber);
+
+    // Add issued ticket to the history
+    strcpy(ticketHistory[numTicketHistoryEntries].passengerName, passenger.name);
+    ticketHistory[numTicketHistoryEntries].busScheduleIndex = scheduleIndex;
+    ticketHistory[numTicketHistoryEntries].numSeats = seatNumber;
+    ticketHistory[numTicketHistoryEntries].totalTicketPrice = passenger.totalTicketPrice;
+    numTicketHistoryEntries++;
+
+    printf("\t\t\t\t\t\t\t\tTicket issued successfully!\n");
+
+    passenger.isTicketIssued = 0;  // Mark the ticket as not issued
 }
+
+void generateReceipt(int scheduleIndex, int seatNumber) {
+    printf("\t\t\t\t\t\t\t\t============================================================================================\n");
+    printf("\t\t\t\t\t\t\t\t\t\t\t********Ticket Receipt********\n");
+    printf("\t\t\t\t\t\t\t\tBus Schedule Index: %d\n", scheduleIndex);
+    printf("\t\t\t\t\t\t\t\tPassenger Name: %s\n", passenger.name);
+    printf("\t\t\t\t\t\t\t\tDeparture Time: %s\n", schedules[scheduleIndex - 1].depTime);
+    printf("\t\t\t\t\t\t\t\tRoute: %s\n", schedules[scheduleIndex - 1].route);
+    printf("\t\t\t\t\t\t\t\tDestination: %s\n", schedules[scheduleIndex - 1].destination);
+    printf("\t\t\t\t\t\t\t\tSeat Number: %d\n", seatNumber);
+    printf("\t\t\t\t\t\t\t\tTotal Ticket Price: %.2f\n", passenger.totalTicketPrice);
+    printf("\t\t\t\t\t\t\t\t============================================================================================\n");
+}
+
 
 
 
@@ -231,11 +362,44 @@ void displayBookingHistory() {
     }
 }
 
+void viewBookedSeatsForSchedule(int scheduleIndex) {
+    if (scheduleIndex < 1 || scheduleIndex > numSchedules) {
+        printf("Invalid schedule index. Please choose a valid schedule.\n");
+        return;
+    }
+
+    BusSchedule *schedule = &schedules[scheduleIndex - 1];
+
+    printf("Booked Seats for Schedule %d (%s to %s):\n", schedule->scheduleId, schedule->route, schedule->destination);
+    printf("Legend: [W] Window Seat, [A] Aisle Seat, [X] Booked Seat\n");
+
+    for (int row = 0; row < MAX_SEATS / 4; row++) {
+        for (int col = 0; col < 4; col++) {
+            int seatNumber = 4 * row + col;
+            char seatType;
+
+            if (col == 0 || col == 3) {
+                seatType = 'W';  // Window seats
+            } else {
+                seatType = 'A';  // Aisle seats
+            }
+
+            char status = schedule->availableSeats[seatNumber];
+
+            if (status == 'X') {
+                printf("[X] ");  // Booked seat
+            } else {
+                printf("[%c%d] ", seatType, seatNumber + 1);  // Available seat with seat number
+            }
+        }
+        printf("\n");
+    }
+}
 
 void displayTicketHistory() {
     printf("\t\t\t\t\t\t\t\t============================================================================================\n");
     printf("\t\t\t\t\t\t\t\t\t\t\t********Ticket Issuing History********\n");
-    printf("\t\t\t\t\t\t\t\t%-20s%-20s%-20s%-20s\n", "Passenger", "Schedule ID", "Number of Seats", "Total Ticket Price");
+    printf("\t\t\t\t\t\t\t\t%-20s%-20s%-20s%-20s\n", "Passenger", "Schedule ID", "seat number", "Total Ticket Price");
     for (int i = 0; i < numTicketHistoryEntries; i++) {
         printf("\t\t\t\t\t\t\t\t%-20s%-20d%-20d%-20.2f\n", ticketHistory[i].passengerName, ticketHistory[i].busScheduleIndex,
                ticketHistory[i].numSeats, ticketHistory[i].totalTicketPrice);
@@ -243,101 +407,107 @@ void displayTicketHistory() {
     printf("\t\t\t\t\t\t\t\t=============================================================================================\n");
 }
 
-void displayCancellationHistory() {
-    printf("\t\t\t\t\t\t\t\t============================================================================================\n");
-    printf("\t\t\t\t\t\t\t\t\t\t\t********Booking Cancellation History********\n");
-    printf("\t\t\t\t\t\t\t\t%-20s%-20s%-20s\n", "Passenger", "Schedule ID", "Number of Seats");
-    for (int i = 0; i < numCancellationHistoryEntries; i++) {
-        printf("\t\t\t\t\t\t\t\t%-20s%-20d%-20d\n", cancellationHistory[i].passengerName, cancellationHistory[i].busScheduleIndex,
-               cancellationHistory[i].numSeats);
-    printf("\t\t\t\t\t\t\t\t============================================================================================\n");
-    }
-}
 
-void cancelBooking() {
+char selectedSeatType;
+
+
+
+// Function to cancel a booking for a specific bus schedule
+void cancelBookingForSchedule(int scheduleIndex) {
+    if (scheduleIndex < 1 || scheduleIndex > numSchedules) {
+        printf("Invalid schedule index. Please choose a valid schedule.\n");
+        return;
+    }
+
+    BusSchedule *schedule = &schedules[scheduleIndex - 1];
+
     if (!passenger.isTicketIssued) {
         printf("You have not booked a ticket yet.\n");
         return;
     }
 
-    int scheduleIndex = passenger.busScheduleIndex;
-    char seatType;
-    int seatNumber;
+    viewAvailableSeatsForSchedule(schedule);
 
-    printf("Enter the seat you want to cancel (e.g., A1, W2): ");
-    char selectedSeat[3]; // A string to store the seat input, e.g., "A1" or "W2"
-    scanf("%s", selectedSeat);
+    int selectedSeat;
+    printf("Enter the seat number you want to cancel (e.g., 1 for A1, 12 for W12): ");
+    scanf("%d", &selectedSeat);
 
-    if ((selectedSeat[0] != 'A' && selectedSeat[0] != 'W') || !isdigit(selectedSeat[1])) {
-        printf("Invalid seat format. Please use the format A1 or W2.\n");
+    if (selectedSeat < 1 || selectedSeat > schedule->capacity) {
+        printf("Invalid seat number. Please choose a valid seat.\n");
         return;
     }
 
-    seatType = selectedSeat[0];
-    seatNumber = selectedSeat[1] - '0';
+    // Adjust the selected seat to a 0-based index
+    selectedSeat--;
 
-    // Calculate the index of the selected seat in the availableSeats array
-    int seatIndex = -1;
-    if (seatType == 'A') {
-        seatIndex = (seatNumber - 1) + ((seatNumber - 1) / 4);
-    } else if (seatType == 'W') {
-        seatIndex = (seatNumber - 1) * 2;
+    if (schedule->availableSeats[selectedSeat] == 0) {
+        printf("The selected seat is not booked. Please choose a booked seat to cancel.\n");
+    } else {
+        schedule->availableSeats[selectedSeat] = 0;  // Mark the seat as available
+        printf("Booking for seat %d has been canceled.\n", selectedSeat + 1);
+        passenger.isTicketIssued = 0;  // Mark the ticket as not issued
     }
+}
 
-    if (seatIndex >= 0 && seatIndex < 57) {
+void cancelBooking() {
+    if (passenger.isTicketIssued) {
+        int scheduleIndex = passenger.busScheduleIndex;
+
+        printf("Enter the seat number you want to cancel (e.g., 1 or 14): ");
+        int selectedSeat;
+        scanf("%d", &selectedSeat);
+
+        if (selectedSeat < 1 || selectedSeat > 57) {
+            printf("Invalid seat number. Please choose a valid seat number between 1 and 57.\n");
+            return;
+        }
+
         // Check if the selected seat is already booked
-        if (schedules[scheduleIndex - 1].availableSeats[seatIndex] == 'X') {
+        if (schedules[scheduleIndex - 1].availableSeats[selectedSeat - 1] == 'X') {
+            // Add the canceled ticket to the cancellation history
+            strcpy(cancellationHistory[numCancellationHistoryEntries].passengerName, passenger.name);
+            cancellationHistory[numCancellationHistoryEntries].busScheduleIndex = scheduleIndex;
+            cancellationHistory[numCancellationHistoryEntries].numSeats = selectedSeat;
+            numCancellationHistoryEntries++;
+
             // Mark the seat as available
-            schedules[scheduleIndex - 1].availableSeats[seatIndex] = 'A';
+            schedules[scheduleIndex - 1].availableSeats[selectedSeat - 1] = 'A';
 
             // Remove the canceled seat from ticket history
             for (int i = 0; i < numTicketHistoryEntries; i++) {
                 if (strcmp(ticketHistory[i].passengerName, passenger.name) == 0 &&
                     ticketHistory[i].busScheduleIndex == scheduleIndex &&
-                    ticketHistory[i].numSeats == seatNumber) {
+                    ticketHistory[i].numSeats == selectedSeat) {
                     // Mark the ticket as canceled in ticket history
                     ticketHistory[i].busScheduleIndex = -1;
                     break;
                 }
             }
 
-            printf("Booking for seat %c%d on schedule %d is canceled.\n", seatType, seatNumber, scheduleIndex);
+            printf("Booking for seat %d on schedule %d is canceled.\n", selectedSeat, scheduleIndex);
             updateAvailableSeats(scheduleIndex, -1);
+            passenger.isTicketIssued = 0;  // Mark the ticket as not issued
         } else {
             printf("The selected seat is not booked. No action taken.\n");
         }
     } else {
-        printf("Invalid seat number. Please choose a valid seat.\n");
+        printf("You have not booked a ticket yet. Please book a ticket before canceling.\n");
     }
 }
 
 
 
-
-
-void issueTicket() {
-    if (!passenger.isTicketIssued) {
-        printf("\t\t\t\t\t\t\t\tYou have not booked a ticket yet.\n");
-
+void displayCancellationHistory() {
+    printf("\t\t\t\t\t\t\t\t============================================================================================\n");
+    printf("\t\t\t\t\t\t\t\t\t\t\t********Booking Cancellation History********\n");
+    printf("\t\t\t\t\t\t\t\t%-20s%-20s%-20s\n", "Passenger", "Schedule ID", "seat no:");
+    for (int i = 0; i < numCancellationHistoryEntries; i++) {
+        printf("\t\t\t\t\t\t\t\t%-20s%-20d%-20d\n", cancellationHistory[i].passengerName, cancellationHistory[i].busScheduleIndex,
+               cancellationHistory[i].numSeats);
     }
-    // Add issued ticket to the history
-    strcpy(ticketHistory[numTicketHistoryEntries].passengerName, passenger.name);
-    ticketHistory[numTicketHistoryEntries].busScheduleIndex = passenger.busScheduleIndex;
-    ticketHistory[numTicketHistoryEntries].numSeats = passenger.numSeats;
-    ticketHistory[numTicketHistoryEntries].totalTicketPrice = passenger.totalTicketPrice;
-    numTicketHistoryEntries++;
-
-
-        printf("\t\t\t\t\t\t\t\t============================================================================================\n");
-    printf("\t\t\t\t\t\t\t\t\t\t\t********Ticket Issued successfully********\n");
-    printf("\t\t\t\t\t\t\t\t%-20s%-20s%-20s%-20s\n", "Passenger", "Schedule ID", "Number of Seats", "Total Ticket Price");
-    for (int i = 0; i < numTicketHistoryEntries; i++) {
-        printf("\t\t\t\t\t\t\t\t%-20s%-20d%-20d%-20.2f\n", ticketHistory[i].passengerName, ticketHistory[i].busScheduleIndex,
-               ticketHistory[i].numSeats, ticketHistory[i].totalTicketPrice);
-    }
-    printf("\t\t\t\t\t\t\t\t=============================================================================================\n");
-    passenger.isTicketIssued = 0;
+    printf("\t\t\t\t\t\t\t\t============================================================================================\n");
 }
+
 
 
 
@@ -454,6 +624,7 @@ void loadCancellationHistoryFromFile() {
 }
 
 
+
 struct user{
     char username[50];
     char password[50];
@@ -470,6 +641,8 @@ int main() {
     loadBusSchedulesFromFile();
     loadTicketHistoryFromFile();
     loadCancellationHistoryFromFile();
+
+
 printf("\n\t\t\t\t\t\t\t\t==================================================================================\n");
     printf("\t\t\t\t\t\t\t\t\t\tWELCOME TO ULTIMATE BUS STATION BOOKING SERVICES\n");
 printf("\t\t\t\t\t\t\t\t==================================================================================\n");
@@ -515,8 +688,26 @@ printf("\t\t\t\t\t\t\t\t========================================================
 system("cls");
     printf("\n\t\t\t\t\t\t\t\tPhone number:\t");
     scanf("%s",phone);
-    printf("\t\t\t\t\t\t\t\tPassword:\t");
-    scanf("%s",pword);
+   printf("\n\t\t\t\t\t\t\t\tPassword:\t");
+char c;
+int i = 0;
+
+// Read characters until Enter is pressed
+while (1) {
+    c = _getch(); // Use _getch() to read a character without echoing to the console
+
+    if (c == '\r') { // Check if Enter is pressed
+        pword[i] = '\0'; // Null-terminate the string
+        break;
+    } else if (c == '\b' && i > 0) { // Check if Backspace is pressed
+        printf("\b \b"); // Move the cursor back, print a space, move the cursor back again
+        i--;
+    } else if (isprint(c)) { // Check if the character is printable
+        pword[i++] = c; // Add the character to the password and move to the next position
+        printf("*"); // Print '*' instead of the actual character
+    }
+}
+
     strcpy(filename,phone);
     fp = fopen(strcat(filename,".dat"),"r");
     if(fp == NULL){
@@ -540,7 +731,9 @@ passenger.isTicketIssued = 0;
                         printf("\t\t\t\t\t\t\t\t6. Display Booking History\n");
                         printf("\t\t\t\t\t\t\t\t7. Display ticket issuing history\n");
                         printf("\t\t\t\t\t\t\t\t8. Display all cancelled tickets\n");
-                        printf("\t\t\t\t\t\t\t\t9. View available seats\n");
+                        printf("\t\t\t\t\t\t\t\t9. Delete a bus schedule detail\n");
+                        printf("\t\t\t\t\t\t\t\t10. Display Booked seats\n");
+
 
                         printf("\t\t\t\t\t\t\t\t0. Exit\n");
                         printf("\t\t\t\t\t\t\t\t\t\tEnter your choice: ");
@@ -575,9 +768,17 @@ passenger.isTicketIssued = 0;
                                 displayCancellationHistory();
                                 break;
                             case 9:
+    // Delete Bus Schedule
+    printf("Enter the schedule index you want to delete: ");
+    scanf("%d", &scheduleIndex);
+    deleteBusSchedule(scheduleIndex);
+    break;
 
-                                break;
-
+case 10: // Assuming 10 is the option to view booked seats
+    printf("Enter the bus schedule index to view booked seats: ");
+    scanf("%d", &scheduleIndex);
+    viewBookedSeatsForSchedule(scheduleIndex);
+    break;
 
 
                             case 0:
@@ -587,7 +788,7 @@ passenger.isTicketIssued = 0;
                                 printf("\t\t\t\t\t\t\t\tInvalid choice. Please try again.\n");
                         }
 
-                        printf("\t\t\t\t\t\t\t\tDo you want to continue with another operation? (y/n): \n\n");
+                        printf("\n\n\t\t\tDo you want to continue with another operation? (y/n): ");
                         scanf(" %c", &cont);
                     }
                 }
@@ -599,7 +800,7 @@ passenger.isTicketIssued = 0;
                 printf("\t\t\t\t\t\t\t\tInvalid choice. Please try again.\n");
         }
 
-        printf("\t\t\t\t\t\t\t\tDo you want to perform another operation? (y/n): ");
+        printf("\n\n\t\t\tDo you want to perform another operation? (y/n): ");
         scanf(" %c", &cont);
     } while (cont == 'y' || cont == 'Y');
 
@@ -609,3 +810,5 @@ passenger.isTicketIssued = 0;
 
     return 0;
 }
+
+
